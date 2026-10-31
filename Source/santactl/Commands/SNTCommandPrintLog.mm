@@ -148,6 +148,10 @@ class StreamMessageSource : public MessageSource {
     if (!coded_input_->ReadVarint32(&message_length)) {
       return absl::InternalError("Failed to parse message length");
     }
+    static constexpr uint32_t kMaxMessageLength = 128 * 1024 * 1024;
+    if (message_length > kMaxMessageLength) {
+      return absl::OutOfRangeError("Message length exceeds maximum allowed size");
+    }
 
     // Read the raw message data
     std::vector<uint8_t> msg_buf(message_length);

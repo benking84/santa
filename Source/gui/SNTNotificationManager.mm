@@ -297,16 +297,27 @@ static NSString* const silencedNotificationsKey = @"SilencedNotifications";
 
   // Start hashing. Progress is reported to the root NSProgress
   // (currentWindowController.progress).
+  __block BOOL replyReceived = NO;
+  bc.invalidationHandler = ^{
+    if (!replyReceived) {
+      replyReceived = YES;
+      [withController updateBlockNotification:event withBundleHash:nil];
+    }
+  };
   [[bc remoteObjectProxy]
       hashBundleBinariesForEvent:event
                         listener:al.endpoint
                            reply:^(NSString* bh, NSArray<SNTStoredExecutionEvent*>* events,
                                    NSNumber* ms) {
+                             if (replyReceived) return;
+                             replyReceived = YES;
                              // Revert to displaying the blockable event if we fail to calculate the
                              // bundle hash
-                             if (!bh)
-                               return [withController updateBlockNotification:event
-                                                               withBundleHash:nil];
+                             if (!bh) {
+                               [withController updateBlockNotification:event withBundleHash:nil];
+                               [bc invalidate];
+                               return;
+                             }
 
                              event.fileBundleHash = bh;
                              event.fileBundleBinaryCount = @(events.count);

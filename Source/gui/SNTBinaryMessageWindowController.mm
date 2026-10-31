@@ -70,6 +70,11 @@
   [_progress removeObserver:self forKeyPath:@"fractionCompleted"];
 }
 
+- (void)windowWillClose:(NSNotification*)notification {
+  [_progress cancel];
+  [super windowWillClose:notification];
+}
+
 - (void)observeValueForKeyPath:(NSString*)keyPath
                       ofObject:(id)object
                         change:(NSDictionary*)change

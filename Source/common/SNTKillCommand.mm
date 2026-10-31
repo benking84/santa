@@ -121,7 +121,7 @@
              bootSessionUUID:(NSString*)bootSessionUUID
                       signal:(int)signal
          targetProcessGroups:(BOOL)targetProcessGroups {
-  if (pid == 0 || pidversion == 0) {
+  if (pid <= 0 || pidversion <= 0) {
     return nil;
   } else {
     // Validate the UUID and normalize it to not have hyphens and be lowercase.
@@ -168,6 +168,9 @@
     DECODE_SELECTOR(decoder, pid, NSNumber, intValue);
     DECODE_SELECTOR(decoder, pidversion, NSNumber, intValue);
     DECODE(decoder, bootSessionUUID, NSString);
+    if (_pid <= 0 || _pidversion <= 0 || _bootSessionUUID.length == 0) {
+      return nil;
+    }
   }
   return self;
 }
@@ -211,6 +214,9 @@
   self = [super initWithCoder:decoder];
   if (self) {
     DECODE(decoder, cdhash, NSString);
+    if (!santa::IsValidCDHash(_cdhash)) {
+      return nil;
+    }
   }
   return self;
 }
@@ -258,6 +264,9 @@
   if (self) {
     DECODE(decoder, teamID, NSString);
     DECODE(decoder, signingID, NSString);
+    if (_teamID.length == 0 || _signingID.length == 0) {
+      return nil;
+    }
   }
   return self;
 }
@@ -301,6 +310,9 @@
   self = [super initWithCoder:decoder];
   if (self) {
     DECODE(decoder, teamID, NSString);
+    if (!santa::IsValidTeamID(_teamID)) {
+      return nil;
+    }
   }
   return self;
 }

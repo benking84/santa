@@ -117,6 +117,9 @@ absl::StatusOr<std::vector<std::string>> ProcessArgumentsForPID(pid_t pid) {
   // Get argc.
   int argc;
   memcpy(&argc, &args[0], sizeof(argc));
+  if (argc <= 0) {
+    return std::vector<std::string>{};
+  }
   // Find the end of the executable path.
   size_t start_pos = sizeof(argc);
   size_t nul_pos = args.find('\0', start_pos);
@@ -129,8 +132,12 @@ absl::StatusOr<std::vector<std::string>> ProcessArgumentsForPID(pid_t pid) {
     return absl::InternalError("Can't find args after executable path");
   }
   std::vector<std::string> local_argv;
-  while (argc-- && nul_pos != std::string::npos) {
+  while (argc-- > 0 && start_pos < args.size()) {
     nul_pos = args.find('\0', start_pos);
+    if (nul_pos == std::string::npos) {
+      local_argv.push_back(args.substr(start_pos));
+      break;
+    }
     local_argv.push_back(args.substr(start_pos, nul_pos - start_pos));
     start_pos = nul_pos + 1;
   }

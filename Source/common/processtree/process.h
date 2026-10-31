@@ -183,6 +183,9 @@ class Process {
   // If the process is tombstoned, the event removing it from the tree has been
   // processed, but refcnt>0 keeps it alive.
   bool tombstoned_;
+  // Timestamp of the scheduled removal in remove_at_, if any. Used to ignore
+  // cancelled removals after a denied AUTH_EXEC rolls back a tentative exec.
+  std::optional<uint64_t> reap_at_ts_;
 };
 
 }  // namespace santa::santad::process_tree

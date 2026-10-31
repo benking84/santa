@@ -136,7 +136,8 @@
   // Massage that into a nice dictionary of OID->String pairs.
   NSMutableDictionary* dict = [NSMutableDictionary dictionary];
   OIDKeyValueList* anAttr;
-  for (NSUInteger i = 0; (anAttr = a.lists[i]); ++i) {
+  for (NSUInteger i = 0; a.lists && (anAttr = a.lists[i]); ++i) {
+    if (!anAttr->vals || !anAttr->vals[0]) continue;
     OIDKeyValue* keyValue = anAttr->vals[0];
 
     // Sanity check

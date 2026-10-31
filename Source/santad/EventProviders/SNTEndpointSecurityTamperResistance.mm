@@ -215,7 +215,7 @@ static NSString* TamperEventName(es_event_type_t type) {
 /// argument inspection drives the outcome.
 TamperAuthResult ValidateLaunchctlExec(const Message& esMsg) {
   es_string_token_t exec_path = esMsg->event.exec.target->executable->path;
-  if (strncmp(exec_path.data, "/bin/launchctl", exec_path.length) != 0) {
+  if (std::string_view(exec_path.data, exec_path.length) != "/bin/launchctl") {
     return TamperAuthResult::AllowCacheable();
   }
 
@@ -458,13 +458,16 @@ TamperAuthResult ValidateLaunchctlExec(const Message& esMsg) {
       if (esMsg->version >= 9) {
         const es_process_t* instigator = esMsg->event.signal.instigator;
         if (instigator != NULL) {
+          bool instigatorValid =
+              (instigator->codesigning_flags & (CS_SIGNED | CS_VALID)) == (CS_SIGNED | CS_VALID);
           NSString* signingId = FormatSigningID(
               santa::StringTokenToNSString(instigator->signing_id),
               santa::StringTokenToNSString(instigator->team_id), instigator->is_platform_binary);
-          bool isAllowlisted = signingId && kTrustedSignalInstigators.contains(
-                                                santa::NSStringToUTF8String(signingId));
+          bool isAllowlisted =
+              instigatorValid && signingId &&
+              kTrustedSignalInstigators.contains(santa::NSStringToUTF8String(signingId));
           bool isPermittedPlatformBinary =
-              self.allowDelegatedSignals && instigator->is_platform_binary;
+              instigatorValid && self.allowDelegatedSignals && instigator->is_platform_binary;
           if (!isAllowlisted && !isPermittedPlatformBinary) {
             return TamperAuthResult::Deny([NSString
                 stringWithFormat:@"Preventing delegated signal to Santa daemon: signal %d, "
@@ -603,7 +606,7 @@ TamperAuthResult ValidateLaunchctlExec(const Message& esMsg) {
   if (IsSleighAccessingOwnState(path, esMsg)) return false;
   if (esMsg->event_type == ES_EVENT_TYPE_AUTH_OPEN) {
     if (![SNTEndpointSecurityTamperResistance isProtectedPath:path]) return false;
-    return (esMsg->event.open.fflag & FWRITE) ||
+    return (esMsg->event.open.fflag & (FWRITE | O_APPEND | O_TRUNC)) ||
            ![SNTEndpointSecurityTamperResistance isReadAllowedForProtectedPath:path];
   }
   return [SNTEndpointSecurityTamperResistance isProtectedPath:path];

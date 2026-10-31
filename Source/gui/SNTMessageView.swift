@@ -355,8 +355,12 @@ public struct TextWithLimit: View {
   private var text: String
   private var limit: Int
 
+  private static let bidiControlCharacters = CharacterSet(
+    charactersIn: "\u{061C}\u{200E}\u{200F}\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}\u{2066}\u{2067}\u{2068}\u{2069}"
+  )
+
   public init(_ text: String, _ limit: Int = 50) {
-    self.text = text
+    self.text = text.components(separatedBy: Self.bidiControlCharacters).joined()
     self.limit = limit
   }
 
@@ -365,7 +369,7 @@ public struct TextWithLimit: View {
       let truncatedText = "\(self.text.prefix(self.limit/2))…\(self.text.suffix(self.limit/2))"
       Text(verbatim: truncatedText).help(self.text)
     } else {
-      Text(self.text)
+      Text(verbatim: self.text)
     }
   }
 }

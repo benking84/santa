@@ -1188,6 +1188,7 @@ static void addPathsFromDefaultMuteSet(NSMutableSet* criticalPaths) {
         [faaRules addEntriesFromDictionary:rule];
       }
     }
+    [rs close];
   }];
   return faaRules;
 }
@@ -1284,6 +1285,14 @@ static void addPathsFromDefaultMuteSet(NSMutableSet* criticalPaths) {
       auto celExpr = _celEvaluator->Compile(santa::NSStringToUTF8StringView(r.celExpr), &arena);
       if (!celExpr.ok()) {
         LOGE(@"Failed to compile CEL expression for static rule %@: %s", r.identifier,
+             std::string(celExpr.status().message()).c_str());
+        continue;
+      }
+    } else if (r.state == SNTRuleStateCELv2 && _celV2Evaluator) {
+      google::protobuf::Arena arena;
+      auto celExpr = _celV2Evaluator->Compile(santa::NSStringToUTF8StringView(r.celExpr), &arena);
+      if (!celExpr.ok()) {
+        LOGE(@"Failed to compile CELv2 expression for static rule %@: %s", r.identifier,
              std::string(celExpr.status().message()).c_str());
         continue;
       }

@@ -7,8 +7,7 @@ def _non_module_deps_impl(_module_ctx):
     git_repository(
         name = "FMDB",
         remote = "https://github.com/ccgus/fmdb.git",
-        commit = "61e51fde7f7aab6554f30ab061cc588b28a97d04",
-        shallow_since = "1589301502 -0700",
+        commit = "1227a3fa2b9916bfd75fe380eb45cd210e69e251",  # tag = 2.7.12
         build_file = Label("//deps:BUILD.fmdb"),
     )
 
@@ -24,7 +23,7 @@ def _non_module_deps_impl(_module_ctx):
     git_repository(
         name = "nats_c",
         remote = "https://github.com/nats-io/nats.c.git",
-        commit = "aed20fe4227a99c6ae3dc97fc35469cc24f081e7",  # tag = v3.12.0
+        commit = "6cb096a7fd24a1927037fd2a2ca2c6fbc5d64e47",  # tag = v3.14.0
         build_file = Label("//deps:BUILD.nats"),
         patches = [Label("//deps/patches/nats_c:0001-natssock-read-no-progress-bound.patch")],
         patch_args = ["-p1"],

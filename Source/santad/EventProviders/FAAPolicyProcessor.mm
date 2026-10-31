@@ -808,4 +808,9 @@ void FAAPolicyProcessor::NotifyExit(const audit_token_t& tok, FAAClientType clie
   tty_message_cache_.Remove(PidPidversion(tok));
 }
 
+void FAAPolicyProcessor::ResetCaches() {
+  reads_cache_.Clear();
+  tty_message_cache_.Clear();
+}
+
 }  // namespace santa

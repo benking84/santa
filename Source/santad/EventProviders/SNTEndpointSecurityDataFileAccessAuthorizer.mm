@@ -245,6 +245,9 @@ FAAPolicyProcessor::TargetPolicyPairList TargetPolicyPairs(
   // Always invalidate ES caches to ensure operations that were previously
   // allowed are re-evaluated. This includes cached execs, so that the EXEC
   // probe can exempt Santa's bundle service.
+  if (_faaPolicyProcessorProxy) {
+    _faaPolicyProcessorProxy->ResetCaches();
+  }
   _esCacheFlusher->Flush(self);
 }
 
@@ -254,6 +257,9 @@ FAAPolicyProcessor::TargetPolicyPairList TargetPolicyPairs(
       self.isSubscribed = false;
     }
     [super unmuteAllTargetPaths];
+  }
+  if (_faaPolicyProcessorProxy) {
+    _faaPolicyProcessorProxy->ResetCaches();
   }
 }
 

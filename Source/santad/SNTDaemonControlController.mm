@@ -25,6 +25,7 @@
 #import <Security/Security.h>
 #include <sys/qos.h>
 
+#include <atomic>
 #include <memory>
 
 #import "Source/common/AccountLookup.h"
@@ -963,9 +964,18 @@ static NSString* StaticDecisionForRule(SNTRule* rule, BOOL enableTransitiveRules
   // Otherwise, the isFCMListening message would potentially be queued behind various long lived
   // sync operations.
   MOLXPCConnection* conn = [SNTXPCSyncServiceInterface configuredConnection];
+  auto replied = std::make_shared<std::atomic<bool>>(false);
+  conn.invalidationHandler = ^{
+    if (!replied->exchange(true)) {
+      reply(SNTPushNotificationStatusDisabled);
+    }
+  };
   [conn resume];
   [conn.remoteObjectProxy pushNotificationStatus:^(SNTPushNotificationStatus response) {
-    reply(response);
+    if (!replied->exchange(true)) {
+      reply(response);
+    }
+    [conn invalidate];
   }];
 }
 
@@ -974,9 +984,18 @@ static NSString* StaticDecisionForRule(SNTRule* rule, BOOL enableTransitiveRules
   // Instead of reusing the existing connection, create a new connection to the sync service.
   // Otherwise, the message would potentially be queued behind various long lived sync operations.
   MOLXPCConnection* conn = [SNTXPCSyncServiceInterface configuredConnection];
+  auto replied = std::make_shared<std::atomic<bool>>(false);
+  conn.invalidationHandler = ^{
+    if (!replied->exchange(true)) {
+      reply(nil);
+    }
+  };
   [conn resume];
   [conn.remoteObjectProxy pushNotificationServerAddress:^(NSString* serverAddress) {
-    reply(serverAddress);
+    if (!replied->exchange(true)) {
+      reply(serverAddress);
+    }
+    [conn invalidate];
   }];
 }
 

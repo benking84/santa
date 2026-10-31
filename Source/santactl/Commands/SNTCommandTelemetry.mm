@@ -87,8 +87,10 @@ REGISTER_COMMAND_NAME(@"telemetry")
 - (void)exportTelemetry {
   int64_t secondsToWait = 300;
   dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+  __block BOOL exportSuccess = NO;
 
   [[self.daemonConn synchronousRemoteObjectProxy] exportTelemetryWithReply:^(BOOL success) {
+    exportSuccess = success;
     if (success) {
       TEE_LOGI(@"Telemetry exported successfully.");
     } else {
@@ -104,7 +106,7 @@ REGISTER_COMMAND_NAME(@"telemetry")
     exit(EXIT_FAILURE);
   }
 
-  exit(EXIT_SUCCESS);
+  exit(exportSuccess ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
 @end

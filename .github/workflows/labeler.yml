@@ -24,9 +24,10 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6.0.2
         with:
           sparse-checkout: .github
+          persist-credentials: false
 
       - name: Apply Labels
-        uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b # ratchet:actions/labeler@v6
+        uses: actions/labeler@bfbfbf23632e1294f26b14e09446e01a71eb27d1 # ratchet:actions/labeler@v6
         with:
           configuration-path: .github/labeler-pr.yml
 

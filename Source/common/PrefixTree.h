@@ -45,21 +45,33 @@ class PrefixTree {
   ~PrefixTree() { PruneLocked(root_); }
 
   bool InsertPrefix(const char* s, ValueT value) {
+    if (!s) {
+      return false;
+    }
     absl::MutexLock lock(lock_);
     return InsertLocked(s, value, NodeType::kPrefix);
   }
 
   bool InsertLiteral(const char* s, ValueT value) {
+    if (!s) {
+      return false;
+    }
     absl::MutexLock lock(lock_);
     return InsertLocked(s, value, NodeType::kLiteral);
   }
 
   bool HasPrefix(const char* input) {
+    if (!input) {
+      return false;
+    }
     absl::ReaderMutexLock lock(lock_);
     return HasPrefixLocked(input);
   }
 
   std::optional<ValueT> LookupLongestMatchingPrefix(const char* input) {
+    if (!input) {
+      return std::nullopt;
+    }
     absl::ReaderMutexLock lock(lock_);
     return LookupLongestMatchingPrefixLocked(input);
   }

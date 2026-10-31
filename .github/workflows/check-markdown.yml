@@ -6,14 +6,19 @@ on:
       - "**.md"
   workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
 
+permissions:
+  contents: read
+
 jobs:
   markdown-check:
     runs-on: ubuntu-latest
     steps:
       - name: "Checkout Santa"
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: "Check for deadlinks"
-        uses: lycheeverse/lychee-action@2b973e86fc7b1f6b36a93795fe2c9c6ae1118621 # ratchet:lycheeverse/lychee-action@v1
+        uses: lycheeverse/lychee-action@43fa0bc3d8fb7fb05b4c3fbbee0c9cf02f8c7eb5 # ratchet:lycheeverse/lychee-action@v2
         with:
           fail: true
       - name: "Check for trailing whitespace and newlines"

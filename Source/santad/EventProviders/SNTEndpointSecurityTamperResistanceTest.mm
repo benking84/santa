@@ -1121,6 +1121,7 @@ static constexpr std::string_view kBenignPath = "/some/other/path";
 
       es_file_t instigatorFile = MakeESFile("/usr/libexec/instigator");
       es_process_t instigator_proc = MakeESProcess(&instigatorFile);
+      instigator_proc.codesigning_flags = CS_SIGNED | CS_VALID;
       instigator_proc.team_id = MakeESStringToken(c.instigatorTeamID);
       instigator_proc.signing_id = MakeESStringToken(c.instigatorSigningID);
       instigator_proc.is_platform_binary = c.instigatorIsPlatform;

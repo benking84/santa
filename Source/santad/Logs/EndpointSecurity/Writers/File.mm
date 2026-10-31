@@ -68,8 +68,12 @@ void File::WatchLogFile() {
   watch_source_ = dispatch_source_create(DISPATCH_SOURCE_TYPE_VNODE, file_handle_.fileDescriptor,
                                          DISPATCH_VNODE_DELETE | DISPATCH_VNODE_RENAME, q_);
 
-  auto shared_this = shared_from_this();
+  std::weak_ptr<File> weak_this = weak_from_this();
   dispatch_source_set_event_handler(watch_source_, ^{
+    std::shared_ptr<File> shared_this = weak_this.lock();
+    if (!shared_this) {
+      return;
+    }
     [shared_this->file_handle_ closeFile];
     shared_this->OpenFileHandleSerialized();
     shared_this->WatchLogFile();
@@ -81,6 +85,9 @@ void File::WatchLogFile() {
 File::~File() {
   if (timer_source_) {
     dispatch_source_cancel(timer_source_);
+  }
+  if (watch_source_) {
+    dispatch_source_cancel(watch_source_);
   }
 }
 

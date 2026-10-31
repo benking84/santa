@@ -211,7 +211,7 @@ absl::StatusOr<typename Evaluator<IsV2>::EvaluationResultT> Evaluator<IsV2>::Eva
   // failed evaluation falls through to the fallbacks -- which would read an
   // annotation no successful rule ever asked for.
   if constexpr (IsV2) {
-    activation.FlushStagedAnnotations(result.ok());
+    activation.FlushStagedAnnotations(result.ok() && result->value != Traits::UNSPECIFIED);
   }
   return result;
 }
@@ -219,7 +219,7 @@ absl::StatusOr<typename Evaluator<IsV2>::EvaluationResultT> Evaluator<IsV2>::Eva
 template <bool IsV2>
 absl::StatusOr<typename Evaluator<IsV2>::EvaluationResultT> Evaluator<IsV2>::EvaluateChecked(
     const ::cel_runtime::CelExpression* expression_plan, const ActivationT& activation,
-    google::protobuf::Arena* arena) {
+    google::protobuf::Arena* arena) const {
   // The kill sink is per-evaluation: a reused activation must not return an
   // earlier evaluation's kill, and RecordPendingKill() keeps the earliest
   // deadline, so a stale one would even win over this evaluation's. Cacheability
@@ -252,14 +252,19 @@ absl::StatusOr<typename Evaluator<IsV2>::EvaluationResultT> Evaluator<IsV2>::Eva
       if (msg->GetDescriptor()->full_name() == "santa.cel.Result") {
         const auto* cel_result = google::protobuf::DynamicCastMessage<::santa::cel::Result>(msg);
         if (cel_result) {
-          auto rv = static_cast<ReturnValue>(cel_result->value());
-          // Check if cooldown was explicitly set (distinguishes constants from functions)
-          std::optional<uint64_t> cooldownOpt;
-          if (cel_result->has_cooldown_minutes()) {
-            cooldownOpt = cel_result->cooldown_minutes();
+          auto descriptor = Traits::ReturnValue_descriptor();
+          if (descriptor->FindValueByNumber(cel_result->value()) != nullptr) {
+            auto rv = static_cast<ReturnValue>(cel_result->value());
+            if (rv != Traits::UNSPECIFIED || allowUnspecified_) {
+              // Check if cooldown was explicitly set (distinguishes constants from functions)
+              std::optional<uint64_t> cooldownOpt;
+              if (cel_result->has_cooldown_minutes()) {
+                cooldownOpt = cel_result->cooldown_minutes();
+              }
+              return EvaluationResultT(rv, activation.IsResultCacheable(), cooldownOpt,
+                                       activation.GetPendingKill());
+            }
           }
-          return EvaluationResultT(rv, activation.IsResultCacheable(), cooldownOpt,
-                                   activation.GetPendingKill());
         }
       }
     }
@@ -268,7 +273,10 @@ absl::StatusOr<typename Evaluator<IsV2>::EvaluationResultT> Evaluator<IsV2>::Eva
     if (int64_t value; result->GetValue(&value)) {
       auto descriptor = Traits::ReturnValue_descriptor();
       if (descriptor->FindValueByNumber((int)value) != nullptr) {
-        return EvaluationResultT(static_cast<ReturnValue>(value), activation.IsResultCacheable());
+        auto rv = static_cast<ReturnValue>(value);
+        if (rv != Traits::UNSPECIFIED) {
+          return EvaluationResultT(rv, activation.IsResultCacheable());
+        }
       }
     }
   }

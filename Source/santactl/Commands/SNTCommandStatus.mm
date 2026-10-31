@@ -198,6 +198,7 @@ REGISTER_COMMAND_NAME(@"status")
           case SNTPushNotificationStatusDisconnected: pushNotifications = @"Disconnected"; break;
           case SNTPushNotificationStatusConnected: {
             pushNotifications = @"FCM";
+            break;
           }
           case SNTPushNotificationStatusConnectedNATS: {
             pushNotifications = @"NPS Push Service";

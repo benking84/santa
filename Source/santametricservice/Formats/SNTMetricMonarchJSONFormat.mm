@@ -124,7 +124,9 @@ const NSString* kKey = @"key";
         }
       }
 
-      monarchDataEntry[kStartTimestamp] = [self->_dateFormatter stringFromDate:entry[@"created"]];
+      if ([entry[@"created"] isKindOfClass:[NSDate class]]) {
+        monarchDataEntry[kStartTimestamp] = [self->_dateFormatter stringFromDate:entry[@"created"]];
+      }
       // Monarch wants all the end timestamp to be updated, even if the value does not change.
       monarchDataEntry[kEndTimestamp] = [self->_dateFormatter stringFromDate:endTimestamp];
 

@@ -240,38 +240,39 @@ ActivationCallbackBlock CreateCELActivationBlock(
       // the activation is built.
       std::shared_ptr<EndpointSecurityAPI> api = esApi;
       std::shared_ptr<santad::process_tree::ProcessTree> tree = processTree;
+      Message msg = esMsg;
 
       return std::make_unique<santa::cel::Activation<IsV2>>(
           std::move(f),
           ^std::vector<std::string>() {
-            return api->ExecArgs(&esMsg->event.exec);
+            return api->ExecArgs(&msg->event.exec);
           },
           ^std::map<std::string, std::string>() {
-            return api->ExecEnvs(&esMsg->event.exec);
+            return api->ExecEnvs(&msg->event.exec);
           },
           ^uid_t() {
-            return audit_token_to_euid(esMsg->event.exec.target->audit_token);
+            return audit_token_to_euid(msg->event.exec.target->audit_token);
           },
           ^std::string() {
-            es_file_t* f = esMsg->event.exec.cwd;
+            es_file_t* f = msg->event.exec.cwd;
             if (!f) return std::string();
             return std::string(f->path.data, f->path.length);
           },
           ^std::string() {
-            es_file_t* f = esMsg->event.exec.target->executable;
+            es_file_t* f = msg->event.exec.target->executable;
             if (!f) return std::string();
             return std::string(f->path.data, f->path.length);
           },
           ^std::vector<AncestorT>() {
-            return Ancestors<IsV2>(tree, esMsg);
+            return Ancestors<IsV2>(tree, msg);
           },
           ^std::vector<FileDescriptorT>() {
             if constexpr (IsV2) {
               std::vector<FileDescriptorT> fds;
-              uint32_t fdCount = api->ExecFDCount(&esMsg->event.exec);
+              uint32_t fdCount = api->ExecFDCount(&msg->event.exec);
               fds.reserve(fdCount);
               for (uint32_t i = 0; i < fdCount; i++) {
-                const es_fd_t* esFD = api->ExecFD(&esMsg->event.exec, i);
+                const es_fd_t* esFD = api->ExecFD(&msg->event.exec, i);
                 FileDescriptorT fd;
                 fd.set_fd(esFD->fd);
                 fd.set_type(FDTypeFromES(esFD->fdtype));

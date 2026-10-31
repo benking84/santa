@@ -146,12 +146,18 @@
     WEAKIFY(self);
     NotificationReplyBlock wrappedReplyBlock = ^(BOOL authenticated) {
       STRONGIFY(self);
+      __block BOOL shouldReply = YES;
       if (self) {
         dispatch_sync(self.pendingQueue, ^{
-          [self.sentToUser removeObject:d];
+          shouldReply = [self.sentToUser containsObject:d];
+          if (shouldReply) {
+            [self.sentToUser removeObject:d];
+          }
         });
       }
-      replyBlock(authenticated);
+      if (shouldReply) {
+        replyBlock(authenticated);
+      }
     };
 
     [rop postBlockNotification:d[@"event"]
@@ -164,12 +170,24 @@
 }
 
 - (void)setNotifierConnection:(MOLXPCConnection*)notifierConnection {
+  MOLXPCConnection* oldConnection = _notifierConnection;
   _notifierConnection = notifierConnection;
+  if (oldConnection && oldConnection != notifierConnection) {
+    oldConnection.invalidationHandler = nil;
+    [oldConnection invalidate];
+  }
 
   WEAKIFY(self);
+  WEAKIFY(notifierConnection);
   _notifierConnection.invalidationHandler = ^{
     STRONGIFY(self);
-    _notifierConnection = nil;
+    STRONGIFY(notifierConnection);
+    if (!self) {
+      return;
+    }
+    if (self->_notifierConnection == notifierConnection) {
+      self->_notifierConnection = nil;
+    }
 
     // When the connection is invalidated, clear any pending notifications with reply blocks
     dispatch_sync(self.pendingQueue, ^{

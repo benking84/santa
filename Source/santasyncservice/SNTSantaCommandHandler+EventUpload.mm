@@ -58,18 +58,27 @@ using santa::StringToNSString;
   NSUInteger expectedReplies = paths.count;
   __block NSUInteger receivedReplies = 0;
   __block NSError* firstError = nil;
-  [strongSyncDelegate eventUploadForPaths:paths
-                                    reply:^(NSError* error) {
-                                      if (error) {
-                                        LOGE(@"SantaCommand: EventUploadRequest failed: %@", error);
-                                        if (!firstError) firstError = error;
-                                      } else {
-                                        LOGI(@"SantaCommand: EventUploadRequest completed");
-                                      }
-                                      if (++receivedReplies == expectedReplies && completion) {
-                                        completion(firstError);
-                                      }
-                                    }];
+  [strongSyncDelegate
+      eventUploadForPaths:paths
+                    reply:^(NSError* error) {
+                      BOOL shouldComplete = NO;
+                      NSError* completionError = nil;
+                      @synchronized(paths) {
+                        if (error) {
+                          LOGE(@"SantaCommand: EventUploadRequest failed: %@", error);
+                          if (!firstError) firstError = error;
+                        } else {
+                          LOGI(@"SantaCommand: EventUploadRequest completed");
+                        }
+                        if (++receivedReplies == expectedReplies) {
+                          shouldComplete = YES;
+                          completionError = firstError;
+                        }
+                      }
+                      if (shouldComplete && completion) {
+                        completion(completionError);
+                      }
+                    }];
 
   return pbResponse;
 }

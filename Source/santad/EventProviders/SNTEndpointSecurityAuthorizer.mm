@@ -34,6 +34,7 @@
 #include "Source/common/es/ESMetricsObserver.h"
 #include "Source/common/es/EnrichedTypes.h"
 #include "Source/common/es/Message.h"
+#include "Source/common/processtree/process_tree_macos.h"
 #include "Source/santad/EventProviders/AuthResultCache.h"
 
 using santa::AuthResultCache;
@@ -135,12 +136,18 @@ using santa::Message;
   bool cacheable = (result == ES_AUTH_RESULT_ALLOW) && !forcePreventCache &&
                    StatIsSystemProtected(&msg->event.exec.target->executable->stat);
 
-  for (id<SNTEndpointSecurityProbe> probe in self.probes) {
-    santa::ProbeInterest interest = [probe probeInterest:msg];
+  if (result == ES_AUTH_RESULT_ALLOW) {
+    for (id<SNTEndpointSecurityProbe> probe in self.probes) {
+      santa::ProbeInterest interest = [probe probeInterest:msg];
 
-    // Prevent caching if a probe is interested in the process. But don't re-enable
-    // caching if it was already previously disabled.
-    cacheable = cacheable && (interest == santa::ProbeInterest::kUninterested);
+      // Prevent caching if a probe is interested in the process. But don't re-enable
+      // caching if it was already previously disabled.
+      cacheable = cacheable && (interest == santa::ProbeInterest::kUninterested);
+    }
+  } else if (self.processTree) {
+    self.processTree->RollbackExec(
+        santa::santad::process_tree::PidFromAuditToken(msg->process->audit_token),
+        santa::santad::process_tree::PidFromAuditToken(msg->event.exec.target->audit_token));
   }
 
   return [self respondToMessage:msg withAuthResult:result cacheable:cacheable];
@@ -228,6 +235,11 @@ using santa::Message;
                                      @"---\n"
                                      @"\n",
                                      targetProc->executable->path.data, reason]);
+      if (self.processTree) {
+        self.processTree->RollbackExec(
+            santa::santad::process_tree::PidFromAuditToken(msg->process->audit_token),
+            santa::santad::process_tree::PidFromAuditToken(msg->event.exec.target->audit_token));
+      }
       [self respondToMessage:msg withAuthResult:ES_AUTH_RESULT_DENY cacheable:false];
       return;
     } else if (returnAction == SNTActionRequestBinary) {
@@ -339,6 +351,11 @@ using santa::Message;
       // interval, and SNTActionRespondDenyOnce still stores no entry at all.
       cacheable = false;
       authResult = ES_AUTH_RESULT_DENY;
+      if (self.processTree) {
+        self.processTree->RollbackExec(
+            santa::santad::process_tree::PidFromAuditToken(esMsg->process->audit_token),
+            santa::santad::process_tree::PidFromAuditToken(esMsg->event.exec.target->audit_token));
+      }
       break;
 
     // Not setting `authResult` intentionally as no ES response takes place

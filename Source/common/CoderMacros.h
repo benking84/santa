@@ -57,24 +57,37 @@ static inline constexpr id SmartBoxVaue(T value) {
 #ifdef __cplusplus
 #define DECODE_SELECTOR(d, o, c, s)                                                         \
   do {                                                                                      \
-    _##o = static_cast<decltype(_##o)>([[d decodeObjectOfClass:[c class] forKey:@(#o)] s]); \
+    c* decoded__ = [d decodeObjectOfClass:[c class] forKey:@(#o)];                          \
+    _##o = [decoded__ isKindOfClass:[c class]] ? static_cast<decltype(_##o)>([decoded__ s]) \
+                                               : static_cast<decltype(_##o)>(0);            \
   } while (0)
 #else
-#define DECODE_SELECTOR(d, o, c, s)                            \
-  do {                                                         \
-    _##o = [[d decodeObjectOfClass:[c class] forKey:@(#o)] s]; \
+#define DECODE_SELECTOR(d, o, c, s)                                 \
+  do {                                                              \
+    c* decoded__ = [d decodeObjectOfClass:[c class] forKey:@(#o)];  \
+    _##o = [decoded__ isKindOfClass:[c class]] ? [decoded__ s] : 0; \
   } while (0)
 #endif
 
 /// Decode a property of an array of objects of the given type
 /// and assign the value to the named property. The element class must be listed so
 /// NSSecureCoding admits the array's contents, but that also lets the archive present a bare
-/// element at the root; guard the result so a malformed archive yields nil rather than a non-array.
+/// element at the root; guard the result and each element so a malformed archive yields nil.
 #define DECODE_ARRAY(d, o, c)                                                                      \
   do {                                                                                             \
     id decoded__ = [d decodeObjectOfClasses:[NSSet setWithObjects:[NSArray class], [c class], nil] \
                                      forKey:@(#o)];                                                \
-    _##o = [decoded__ isKindOfClass:[NSArray class]] ? decoded__ : nil;                            \
+    if ([decoded__ isKindOfClass:[NSArray class]]) {                                               \
+      for (id elem__ in decoded__) {                                                               \
+        if (![elem__ isKindOfClass:[c class]]) {                                                   \
+          decoded__ = nil;                                                                         \
+          break;                                                                                   \
+        }                                                                                          \
+      }                                                                                            \
+      _##o = decoded__;                                                                            \
+    } else {                                                                                       \
+      _##o = nil;                                                                                  \
+    }                                                                                              \
   } while (0)
 
 /// Decode a property of a dictionary of objects of many common types

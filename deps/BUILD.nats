@@ -29,6 +29,7 @@ cc_library(
         "@boringssl//:crypto",
     ],
     local_defines = [
+        "NATS_FORCE_HOST_VERIFICATION",
         "NATS_HAS_TLS",
         "_REENTRANT",
         # BoringSSL compatibility shims. BoringSSL removed or never added these

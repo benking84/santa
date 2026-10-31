@@ -307,6 +307,10 @@ using santa::Processor;
 }
 
 - (int64_t)computeBudgetForDeadline:(uint64_t)deadline currentTime:(uint64_t)currentTime {
+  if (currentTime >= deadline) {
+    return 0;
+  }
+
   // First get how much time we have left
   int64_t nanosUntilDeadline = (int64_t)MachTimeToNanos(deadline - currentTime);
 

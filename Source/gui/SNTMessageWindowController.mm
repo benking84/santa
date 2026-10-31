@@ -30,7 +30,7 @@
 
   window.titlebarAppearsTransparent = YES;
   window.movableByWindowBackground = YES;
-  window.releasedWhenClosed = YES;
+  window.releasedWhenClosed = NO;
   [window standardWindowButton:NSWindowZoomButton].hidden = YES;
   [window standardWindowButton:NSWindowCloseButton].hidden = YES;
   [window standardWindowButton:NSWindowMiniaturizeButton].hidden = YES;

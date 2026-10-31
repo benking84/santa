@@ -73,13 +73,13 @@ static const uint8_t kMaxEnqueuedSyncs = 2;
 
 @property(nonatomic) MOLXPCConnection* daemonConn;
 
-@property(nonatomic) BOOL reachable;
+@property(atomic) BOOL reachable;
 @property nw_path_monitor_t pathMonitor;
 // Whether the current path monitor has delivered its initial path update.
 // nw_path_monitor reports the current path state once on start; that first
 // update is a baseline and must not trigger a sync. Only a subsequent
 // down->up transition should.
-@property(nonatomic) BOOL hasInitialPathState;
+@property(atomic) BOOL hasInitialPathState;
 
 // If set, push notifications are being used.
 @property id<SNTPushNotificationsClientDelegate> pushNotifications;
@@ -407,6 +407,7 @@ static const uint8_t kMaxEnqueuedSyncs = 2;
     SLOGE(@"Request timed out after 30s");
     guardedReply(0, @"Request timed out");
   }
+  [syncState.session finishTasksAndInvalidate];
 }
 
 #pragma mark sync control / SNTPushNotificationsDelegate methods
@@ -521,19 +522,21 @@ static const uint8_t kMaxEnqueuedSyncs = 2;
 }
 
 - (void)eventUploadForPath:(NSString*)path reply:(void (^)(NSError* error))reply {
-  if (path.length == 0) {
-    reply([NSError errorWithDomain:@"com.northpolesec.santa.syncservice"
-                              code:1
-                          userInfo:@{NSLocalizedDescriptionKey : @"Empty path"}]);
-    return;
-  }
-
   // Run on the dedicated serial event-upload queue: it avoids blocking syncQueue (which would
   // starve regular syncs), and serializing here means a single EventUpload command carrying many
   // paths processes them one at a time rather than fanning out into concurrent bundle-service
   // connections and sync POSTs. postEventsToSyncServer: is thread-safe and doesn't require
   // syncQueue serialization.
   dispatch_async(self.eventUploadQueue, ^{
+    if (path.length == 0) {
+      if (reply) {
+        reply([NSError errorWithDomain:@"com.northpolesec.santa.syncservice"
+                                  code:1
+                              userInfo:@{NSLocalizedDescriptionKey : @"Empty path"}]);
+      }
+      return;
+    }
+
     auto replied = std::make_shared<std::atomic<bool>>(false);
     void (^guardedReply)(NSError*) = ^(NSError* e) {
       if (replied->exchange(true)) return;

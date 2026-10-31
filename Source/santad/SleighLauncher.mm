@@ -22,6 +22,7 @@
 
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <string>
 
 #include "absl/cleanup/cleanup.h"
@@ -60,7 +61,7 @@ absl::Status SleighLauncher::LaunchTelemetryExport(const std::vector<std::string
   };
 
   for (const auto& file : input_files) {
-    int fd = open(file.c_str(), O_RDONLY);
+    int fd = open(file.c_str(), O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
       // The file may have been evicted (spool full) or already consumed between
       // enumeration and now. A vanished file isn't an error: skip it and export
@@ -134,7 +135,7 @@ absl::StatusOr<::santa::telemetry::v1::SleighSignalScanResponse> SleighLauncher:
   // Scan a dup: RunSleigh closes the fds it is handed, but the caller owns input_fd (it keeps the
   // spool file's inode alive for the duration of the scan). The dup shares input_fd's offset,
   // which the caller guarantees is at 0.
-  int fd = dup(input_fd);
+  int fd = fcntl(input_fd, F_DUPFD_CLOEXEC, 0);
   if (fd < 0) {
     LOGD(@"SleighLauncher::LaunchSignalScan(): Failed to dup input fd: %d", errno);
     return absl::InternalError("Failed to dup signal scan input fd");
@@ -144,7 +145,7 @@ absl::StatusOr<::santa::telemetry::v1::SleighSignalScanResponse> SleighLauncher:
   // a zero-length file is a valid empty boltdb (sleigh initializes it on first open). Sleigh drops
   // privileges after fork but keeps this inherited fd.
   std::string state_db_path(kSignalScanStateDbPath);
-  int state_fd = open(state_db_path.c_str(), O_RDWR | O_CREAT, 0600);
+  int state_fd = open(state_db_path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
   if (state_fd < 0) {
     LOGD(@"SleighLauncher::LaunchSignalScan(): Failed to open state db %s: %d",
          state_db_path.c_str(), errno);
@@ -242,11 +243,25 @@ absl::StatusOr<std::string> SleighLauncher::RunSleigh(const std::string& seriali
     return sig;
   }
 
+  // Serialize pipe creation + FD_CLOEXEC setup + fork() across concurrent Sleigh
+  // launches so another thread cannot inherit our pipe ends before FD_CLOEXEC is set.
+  static std::mutex* fork_mutex = new std::mutex();
+  std::unique_lock<std::mutex> fork_lock(*fork_mutex);
+
+  for (int fd : input_fds) {
+    int flags = fcntl(fd, F_GETFD);
+    if (flags >= 0) {
+      fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+    }
+  }
+
   // stdin pipe (config in).
   int stdin_pipe[2];
   if (pipe(stdin_pipe) != 0) {
     return absl::InternalError("Failed to create stdin pipe");
   }
+  fcntl(stdin_pipe[0], F_SETFD, FD_CLOEXEC);
+  fcntl(stdin_pipe[1], F_SETFD, FD_CLOEXEC);
 
   // stdout pipe (response out), only when capturing.
   int stdout_pipe[2] = {-1, -1};
@@ -256,6 +271,8 @@ absl::StatusOr<std::string> SleighLauncher::RunSleigh(const std::string& seriali
       close(stdin_pipe[1]);
       return absl::InternalError("Failed to create stdout pipe");
     }
+    fcntl(stdout_pipe[0], F_SETFD, FD_CLOEXEC);
+    fcntl(stdout_pipe[1], F_SETFD, FD_CLOEXEC);
   }
 
   // Prepare argv (before fork, no ObjC in child).
@@ -264,6 +281,7 @@ absl::StatusOr<std::string> SleighLauncher::RunSleigh(const std::string& seriali
 
   pid_t pid = fork();
   if (pid < 0) {
+    fork_lock.unlock();
     close(stdin_pipe[0]);
     close(stdin_pipe[1]);
     if (capture_stdout) {
@@ -276,6 +294,7 @@ absl::StatusOr<std::string> SleighLauncher::RunSleigh(const std::string& seriali
 
   if (pid == 0) {
     // Child process - only async-signal-safe functions from here.
+    fork_lock.release();
     dup2(stdin_pipe[0], STDIN_FILENO);
     if (capture_stdout) {
       dup2(stdout_pipe[1], STDOUT_FILENO);
@@ -289,6 +308,12 @@ absl::StatusOr<std::string> SleighLauncher::RunSleigh(const std::string& seriali
       close(stdout_pipe[0]);
       close(stdout_pipe[1]);
     }
+    for (int fd : input_fds) {
+      int flags = fcntl(fd, F_GETFD);
+      if (flags >= 0) {
+        fcntl(fd, F_SETFD, flags & ~FD_CLOEXEC);
+      }
+    }
 
     if (credential_mode == ChildCredentialMode::kDropRoot && !DropRootPrivileges()) {
       _exit(126);
@@ -297,6 +322,8 @@ absl::StatusOr<std::string> SleighLauncher::RunSleigh(const std::string& seriali
     execv(sleigh_path_cstr, const_cast<char* const*>(argv));
     _exit(127);
   }
+
+  fork_lock.unlock();
 
   // Parent process.
   // The parent doesn't use its copies of the input fds after fork — the child inherited its own

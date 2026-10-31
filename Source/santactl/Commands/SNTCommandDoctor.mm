@@ -49,6 +49,8 @@ void print(NSString* format, ...) {
     } else {
       format = [NSString stringWithFormat:@"%@\n", format];
     }
+  } else {
+    format = [NSString stringWithFormat:@"%@\n", format];
   }
   vfprintf(stdout, format.UTF8String, args);
   va_end(args);
@@ -187,8 +189,8 @@ REGISTER_COMMAND_NAME(@"doctor")
   for (pid_t pid : pidList.value()) {
     // Copies the contents of info.pbi_name or info.pbi_comm into buffer.
     // Since pbi_comm is limited to first 15 chars, pbi_name is preferred.
-    char name[2 * MAXCOMLEN];
-    proc_name(pid, name, sizeof(name));
+    char name[2 * MAXCOMLEN] = {};
+    if (proc_name(pid, name, sizeof(name)) <= 0) continue;
 
     NSString* nsName = @(name);
     if ([nsName isEqualToString:@"Santa"]) foundSanta = YES;

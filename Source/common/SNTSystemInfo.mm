@@ -88,15 +88,19 @@
 }
 
 + (NSString*)longHostname {
-  char hostname[MAXHOSTNAMELEN];
-  gethostname(hostname, (int)sizeof(hostname));
+  char hostname[MAXHOSTNAMELEN] = {};
+  if (gethostname(hostname, (int)sizeof(hostname) - 1) != 0) {
+    return @"unknown";
+  }
   return @(hostname);
 }
 
 + (NSString*)modelIdentifier {
-  char model[32];
-  size_t len = 32;
-  sysctlbyname("hw.model", model, &len, NULL, 0);
+  char model[32] = {};
+  size_t len = sizeof(model) - 1;
+  if (sysctlbyname("hw.model", model, &len, NULL, 0) != 0) {
+    return @"unknown";
+  }
   return @(model);
 }
 

@@ -70,7 +70,7 @@ jobs:
       - name: Auth to GCP
         continue-on-error: true
         id: auth
-        uses: "google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093" # ratchet:google-github-actions/auth@v3
+        uses: "google-github-actions/auth@f112390a2df09a12627392e64b013493f1648c2b" # ratchet:google-github-actions/auth@v3
         with:
           workload_identity_provider: "projects/131531281042/locations/global/workloadIdentityPools/github/providers/github"
           project_id: "santa-build-cache"

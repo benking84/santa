@@ -484,12 +484,19 @@ NSString* const kMOLCodesignCheckerErrorDomain = @"com.northpolesec.santa.molcod
   for (NSDictionary* arch in signingInformation) {
     NSDictionary* info = arch.allValues.firstObject;
     int flags = [info[(__bridge id)kSecCodeInfoFlags] intValue];
+    id certsOrAdhoc;
     if (flags & kSecCodeSignatureAdhoc) {
-      [chains addObject:@"-"];
+      certsOrAdhoc = @"-";
     } else {
       NSArray* certs = info[(__bridge id)kSecCodeInfoCertificates];
-      [chains addObject:[MOLCertificate certificatesFromArray:certs]];
+      certsOrAdhoc = [MOLCertificate certificatesFromArray:certs] ?: @[];
     }
+    [chains addObject:@[
+      certsOrAdhoc,
+      @(flags),
+      info[(__bridge id)kSecCodeInfoIdentifier] ?: @"",
+      info[(__bridge id)kSecCodeInfoTeamIdentifier] ?: @"",
+    ]];
     if (chains.count > 1) return NO;
   }
   return YES;
@@ -509,11 +516,13 @@ NSString* const kMOLCodesignCheckerErrorDomain = @"com.northpolesec.santa.molcod
     NSDictionary* attributes =
         @{(__bridge NSString*)kSecCodeAttributeUniversalFileOffset : offsets[arch]};
     SecStaticCodeRef codeRef = NULL;
-    SecStaticCodeCreateWithPathAndAttributes((__bridge CFURLRef)[NSURL fileURLWithPath:path],
-                                             kSecCSDefaultFlags,
-                                             (__bridge CFDictionaryRef)attributes, &codeRef);
+    OSStatus status = SecStaticCodeCreateWithPathAndAttributes(
+        (__bridge CFURLRef)[NSURL fileURLWithPath:path], kSecCSDefaultFlags,
+        (__bridge CFDictionaryRef)attributes, &codeRef);
     CFDictionaryRef signingDict = NULL;
-    SecCodeCopySigningInformation(codeRef, kSecCSSigningInformation, &signingDict);
+    if (status == errSecSuccess && codeRef) {
+      SecCodeCopySigningInformation(codeRef, kSecCSSigningInformation, &signingDict);
+    }
     [infos addObject:@{arch : CFBridgingRelease(signingDict) ?: @{}}];
     if (codeRef) CFRelease(codeRef);
   }
@@ -559,6 +568,9 @@ NSString* const kMOLCodesignCheckerErrorDomain = @"com.northpolesec.santa.molcod
       if (offset > 0) {
         NSString* arch = [self architectureString:(struct fat_arch*)&fat_arch[i]
                                         bigEndian:bigEndian];
+        if (offsets[arch]) {
+          arch = [NSString stringWithFormat:@"%@_%d", arch, i];
+        }
         offsets[arch] = @(offset);
       }
     }
@@ -570,6 +582,9 @@ NSString* const kMOLCodesignCheckerErrorDomain = @"com.northpolesec.santa.molcod
       // for the whole universal binary.
       if (offset > 0) {
         NSString* arch = [self architectureString:&fat_arch[i] bigEndian:bigEndian];
+        if (offsets[arch]) {
+          arch = [NSString stringWithFormat:@"%@_%d", arch, i];
+        }
         offsets[arch] = @(offset);
       }
     }
@@ -580,7 +595,7 @@ NSString* const kMOLCodesignCheckerErrorDomain = @"com.northpolesec.santa.molcod
 
 - (NSDictionary*)architectureAndOffsetsForUniversalBinaryPath:(NSString*)path {
   if (!path) return nil;
-  int fd = open(path.UTF8String, O_RDONLY | O_CLOEXEC);
+  int fd = open(path.UTF8String, O_RDONLY | O_CLOEXEC | O_NONBLOCK);
   if (fd == -1) return nil;
   NSDictionary* offsets = [self architectureAndOffsetsForFileDescriptor:fd];
   close(fd);

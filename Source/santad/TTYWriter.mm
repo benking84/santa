@@ -66,7 +66,7 @@ void TTYWriter::Write(NSString* ttyPath, bool send_signal, NSString* (^messageCr
   msg = [msg stringByAppendingFormat:@"\n"];
 
   dispatch_async(q_, ^{
-    int fd = open(tty.UTF8String, O_WRONLY | O_NOCTTY);
+    int fd = open(tty.UTF8String, O_WRONLY | O_NOCTTY | O_NONBLOCK);
     if (fd == -1) {
       LOGW(@"Failed to open TTY for writing: %s", strerror(errno));
       return;

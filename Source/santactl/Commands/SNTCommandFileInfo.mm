@@ -819,18 +819,21 @@ static void ResumeDaemonConnection(SNTCommandFileInfo* cmd) {
 }
 
 - (BOOL)shouldOutputValueToDictionary:(NSMutableDictionary*)outputDict
-                          valueForKey:(NSString* (^)(NSString* key))valueForKey {
+                          valueForKey:(id (^)(NSString* key))valueForKey {
   if (self.outputFilters.count == 0) return YES;
 
   int matches = 0;
   for (NSString* key in self.outputFilters) {
-    NSString* value = valueForKey(key);
+    id rawValue = valueForKey(key);
+    NSString* value = [rawValue isKindOfClass:[NSString class]]
+                          ? (NSString*)rawValue
+                          : (rawValue ? [rawValue description] : @"");
     NSRegularExpression* regex = self.outputFilters[key];
     if (![regex firstMatchInString:value options:0 range:NSMakeRange(0, value.length)]) continue;
     // If this is a value we want to show, store it in the output dictionary.
     // This does a linear search on an array, but it's a small array.
-    if (outputDict && value.length && [self.outputKeyList containsObject:key]) {
-      outputDict[key] = value;
+    if (outputDict && value.length && [self.outputKeyList containsObject:key] && rawValue) {
+      outputDict[key] = rawValue;
     }
     ++matches;
   }
@@ -875,7 +878,7 @@ static void ResumeDaemonConnection(SNTCommandFileInfo* cmd) {
 
     // Check if we should skip over this item based on outputFilters.
     BOOL shouldOutput = [self shouldOutputValueToDictionary:nil
-                                                valueForKey:^NSString*(NSString* key) {
+                                                valueForKey:^id(NSString* key) {
                                                   return cert[key] ?: @"";
                                                 }];
     if (!shouldOutput) {
@@ -892,7 +895,7 @@ static void ResumeDaemonConnection(SNTCommandFileInfo* cmd) {
     // However we also don't want to recompute info, so we save any values that we plan to show.
     BOOL shouldOutput =
         [self shouldOutputValueToDictionary:outputDict
-                                valueForKey:^NSString*(NSString* key) {
+                                valueForKey:^id(NSString* key) {
                                   return self.propertyMap[key](self, fileInfo) ?: @"";
                                 }];
     if (!shouldOutput) {
@@ -929,6 +932,7 @@ static void ResumeDaemonConnection(SNTCommandFileInfo* cmd) {
                                  NSMutableArray* bundleHashes = [[NSMutableArray alloc] init];
 
                                  for (SNTStoredExecutionEvent* event in events) {
+                                   if (!event.fileSHA256 || !event.filePath) continue;
                                    [bundleHashes addObject:@{
                                      kSHA256 : event.fileSHA256,
                                      kPath : event.filePath
@@ -1152,11 +1156,37 @@ static void ResumeDaemonConnection(SNTCommandFileInfo* cmd) {
   return paths.copy;
 }
 
+- (id)sanitizeObjectForJSON:(id)obj {
+  if ([obj isKindOfClass:[NSDictionary class]]) {
+    NSMutableDictionary* sanitized = [NSMutableDictionary dictionaryWithCapacity:[obj count]];
+    [(NSDictionary*)obj enumerateKeysAndObjectsUsingBlock:^(id key, id val, BOOL* stop) {
+      NSString* strKey = [key isKindOfClass:[NSString class]] ? key : [key description];
+      sanitized[strKey] = [self sanitizeObjectForJSON:val];
+    }];
+    return sanitized;
+  } else if ([obj isKindOfClass:[NSArray class]]) {
+    NSMutableArray* sanitized = [NSMutableArray arrayWithCapacity:[obj count]];
+    for (id item in (NSArray*)obj) {
+      [sanitized addObject:[self sanitizeObjectForJSON:item]];
+    }
+    return sanitized;
+  } else if ([obj isKindOfClass:[NSData class]]) {
+    return [(NSData*)obj base64EncodedStringWithOptions:0];
+  } else if ([obj isKindOfClass:[NSDate class]]) {
+    return [self.dateFormatter stringFromDate:(NSDate*)obj];
+  } else if ([obj isKindOfClass:[NSString class]] || [obj isKindOfClass:[NSNumber class]] ||
+             [obj isKindOfClass:[NSNull class]]) {
+    return obj;
+  }
+  return [obj description];
+}
+
 - (NSString*)jsonStringForDictionary:(NSDictionary*)dict {
-  NSData* jsonData = [NSJSONSerialization dataWithJSONObject:dict
+  NSDictionary* sanitizedDict = [self sanitizeObjectForJSON:dict];
+  NSData* jsonData = [NSJSONSerialization dataWithJSONObject:sanitizedDict
                                                      options:NSJSONWritingPrettyPrinted
                                                        error:NULL];
-  return [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+  return jsonData ? [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding] : @"{}";
 }
 
 - (NSString*)stringForSigningChain:(NSArray*)signingChain key:(NSString*)key {

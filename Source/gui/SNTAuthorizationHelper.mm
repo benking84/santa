@@ -39,11 +39,14 @@ static const NSTimeInterval kAdminJustificationPromptTimeoutSeconds = 120;
 }
 
 + (void)authorizeWithReason:(NSString*)reason replyBlock:(void (^)(BOOL success))replyBlock {
+  void (^copiedReply)(BOOL) = [replyBlock copy];
   LAContext* context = [[LAContext alloc] init];
   [context evaluatePolicy:[self authorizationPolicy]
           localizedReason:reason
                     reply:^(BOOL success, NSError* _Nullable error) {
-                      replyBlock(success);
+                      if (copiedReply) {
+                        copiedReply(success);
+                      }
                     }];
 }
 
@@ -214,15 +217,28 @@ static const NSTimeInterval kAdminJustificationPromptTimeoutSeconds = 120;
                            }];
 }
 
++ (NSString*)sanitizeDisplayString:(NSString*)input {
+  if (!input.length) return @"";
+  static NSCharacterSet* bidiSet;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    bidiSet = [NSCharacterSet
+        characterSetWithCharactersInString:
+            @"\u061C\u200E\u200F\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069"];
+  });
+  return [[input componentsSeparatedByCharactersInSet:bidiSet] componentsJoinedByString:@""];
+}
+
 + (NSString*)executionAuthorizationReasonForEvent:(SNTStoredExecutionEvent*)event {
-  NSString* bundleName = event.fileBundleName ?: @"";
+  NSString* bundleName = [self sanitizeDisplayString:event.fileBundleName ?: @""];
   NSString* filePath = event.filePath ?: @"";
+  NSString* sanitizedFileName = [self sanitizeDisplayString:filePath.lastPathComponent];
 
   // Silent TouchID shows no window, so this string is the user's only context:
   // don't name the possibly-wrong on-disk bundle. The path names the exec
   // target, so it is safe to show.
   if (event.contentAttributesUnverified) {
-    if (filePath.length == 0) {
+    if (sanitizedFileName.length == 0) {
       return NSLocalizedString(
           @"authorize execution of an application whose identity could not be verified",
           @"Authorize execution of an unidentifiable application with an unverifiable identity");
@@ -232,7 +248,7 @@ static const NSTimeInterval kAdminJustificationPromptTimeoutSeconds = 120;
                       NSLocalizedString(
                           @"authorize execution of %@, whose identity could not be verified",
                           @"Authorize execution of an application with an unverifiable identity"),
-                      filePath.lastPathComponent];
+                      sanitizedFileName];
   }
 
   if (bundleName.length > 0) {
@@ -241,12 +257,12 @@ static const NSTimeInterval kAdminJustificationPromptTimeoutSeconds = 120;
                                                 @"authorize execution of the application %@",
                                                 @"Authorize execution of an application with name"),
                                             bundleName];
-  } else if (filePath.length > 0) {
+  } else if (sanitizedFileName.length > 0) {
     return [NSString
         localizedStringWithFormat:NSLocalizedString(
                                       @"authorize execution of %@",
                                       @"Authorize execution of an application with file name"),
-                                  filePath.lastPathComponent];
+                                  sanitizedFileName];
   } else {
     return NSLocalizedString(@"authorize execution", @"Authorize execution");
   }

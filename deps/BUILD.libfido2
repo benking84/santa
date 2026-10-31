@@ -35,7 +35,7 @@ cc_library(
         "-DHAVE_MEMSET_S",
         "-Wno-unused-parameter",
     ],
-    defines = HAVE_DEFINES,
+    local_defines = HAVE_DEFINES,
     # Do NOT add includes = ["openbsd-compat"] here. The openbsd-compat
     # directory contains shim headers (e.g. time.h, err.h) that shadow system
     # headers and cause infinite include recursion. libfido2 sources already
@@ -83,18 +83,18 @@ cc_library(
         "-DLIBRESSL_VERSION_NUMBER=0x4000000fL",
         "-Wno-unused-parameter",
     ],
-    defines = HAVE_DEFINES + [
-        "TLS=__thread",
-        "_FIDO_MAJOR=1",
-        "_FIDO_MINOR=17",
-        "_FIDO_PATCH=0",
-    ],
     includes = ["src"],
     linkopts = [
         "-framework CoreFoundation",
         "-framework IOKit",
         # src/compress.c uses zlib for largeBlob compression.
         "-lz",
+    ],
+    local_defines = HAVE_DEFINES + [
+        "TLS=__thread",
+        "_FIDO_MAJOR=1",
+        "_FIDO_MINOR=17",
+        "_FIDO_PATCH=0",
     ],
     visibility = ["//visibility:public"],
     deps = [

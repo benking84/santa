@@ -370,6 +370,24 @@ using ScopedSecTrustRef = santa::ScopedCFTypeRef<SecTrustRef>;
                          issuerCountryName:(NSString*)issuerCountryName
                              issuerOrgName:(NSString*)issuerOrgName
                              issuerOrgUnit:(NSString*)issuerOrgUnit {
+  return [self identityByFilteringArray:array
+                             commonName:commonName
+                       issuerCommonName:issuerCommonName
+                      issuerCountryName:issuerCountryName
+                          issuerOrgName:issuerOrgName
+                          issuerOrgUnit:issuerOrgUnit
+                                  depth:0];
+}
+
+- (SecIdentityRef)identityByFilteringArray:(NSArray*)array
+                                commonName:(NSString*)commonName
+                          issuerCommonName:(NSString*)issuerCommonName
+                         issuerCountryName:(NSString*)issuerCountryName
+                             issuerOrgName:(NSString*)issuerOrgName
+                             issuerOrgUnit:(NSString*)issuerOrgUnit
+                                     depth:(NSUInteger)depth {
+  if (depth > 8) return NULL;
+
   NSArray<MOLCertificate*>* sortedCerts = [self filterAndSortArray:array
                                                         commonName:commonName
                                                   issuerCommonName:issuerCommonName
@@ -404,7 +422,8 @@ using ScopedSecTrustRef = santa::ScopedCFTypeRef<SecTrustRef>;
                                                 issuerCommonName:cert.commonName
                                                issuerCountryName:cert.countryName
                                                    issuerOrgName:cert.orgName
-                                                   issuerOrgUnit:cert.orgUnit];
+                                                   issuerOrgUnit:cert.orgUnit
+                                                           depth:depth + 1];
     if (leafIdentity) return leafIdentity;
   }
   return NULL;

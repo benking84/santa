@@ -146,16 +146,16 @@ static int NATSSSLVerifyCallback(int preverifyOk, void* ctx) {
 // Queue for processing messages
 @property(nonatomic) dispatch_queue_t messageQueue;
 @property(atomic, readwrite) BOOL isConnected;
-@property(nonatomic, readwrite) NSUInteger fullSyncInterval;
+@property(atomic, readwrite) NSUInteger fullSyncInterval;
 @property(atomic) BOOL isShuttingDown;
 // Push notification configuration from preflight
-@property(nonatomic, copy) NSString* pushServer;
+@property(atomic, copy) NSString* pushServer;
 // nkey
-@property(nonatomic, copy) NSString* pushToken;
-@property(nonatomic, copy) NSString* jwt;
-@property(nonatomic, copy) NSString* pushDeviceID;
-@property(nonatomic, copy) NSArray<NSString*>* tags;
-@property(nonatomic, copy) NSData* hmacKey;
+@property(atomic, copy) NSString* pushToken;
+@property(atomic, copy) NSString* jwt;
+@property(atomic, copy) NSString* pushDeviceID;
+@property(atomic, copy) NSArray<NSString*>* tags;
+@property(atomic, copy) NSData* hmacKey;
 // Nonce cache for replay protection
 // Two-generation cache with lazy rotation
 @property(nonatomic) NSMutableSet<NSString*>* currentNonces;
@@ -731,11 +731,13 @@ static int NATSSSLVerifyCallback(int preverifyOk, void* ctx) {
       if (payload.length > 0 && syncRequest.ParseFromArray(payload.bytes, (int)payload.length) &&
           syncRequest.has_max_jitter()) {
         // max_jitter is explicitly set, honor it (including an explicit 0,
-        // which requests an immediate sync).
-        maxJitter = syncRequest.max_jitter();
+        // which requests an immediate sync), bounded to 1 hour to prevent
+        // indefinite sync suppression from a huge max_jitter value.
+        static constexpr uint32_t kMaxAllowedPushJitterSeconds = 3600;
+        maxJitter = std::min<uint32_t>(syncRequest.max_jitter(), kMaxAllowedPushJitterSeconds);
       }
 
-      jitterSeconds = arc4random_uniform(maxJitter);
+      jitterSeconds = maxJitter > 0 ? arc4random_uniform(maxJitter) : 0;
       LOGI(@"NATS: Scheduling sync in %u seconds (max jitter %u) due to tag message on %@",
            jitterSeconds, maxJitter, subject);
     } else {

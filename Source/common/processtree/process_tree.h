@@ -79,6 +79,11 @@ class ProcessTree {
   // Inform the tree of a process exit.
   void HandleExit(uint64_t timestamp, const Process& p);
 
+  // Roll back a tentative exec transition when an AUTH_EXEC event is denied by
+  // Santa. Restores `actor` so its scheduled removal is ignored and removes (or
+  // tombstones, while tokens hold it) the unexecuted `target` node.
+  void RollbackExec(struct Pid actor, struct Pid target);
+
   // Result of GetExecActor. `proc` is the execing (actor) process; it is
   // populated only when `already_seen` is false (and may still be empty then if
   // the actor is unknown to the tree), so callers must check `already_seen`

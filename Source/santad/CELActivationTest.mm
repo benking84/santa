@@ -310,10 +310,9 @@ std::string MakeRawCDHash() {
   mockESApi->SetExpectationsRetainReleaseMessage();
   EXPECT_CALL(*mockESApi, ExecArgs)
       .WillOnce(testing::Return(std::vector<std::string>{"/bin/tool", "--check"}));
-  Message msg(mockESApi, &esMsg);
-
   std::unique_ptr<::google::api::expr::runtime::BaseActivation> base;
   @autoreleasepool {
+    Message msg(mockESApi, &esMsg);
     ActivationCallbackBlock block = santa::CreateCELActivationBlock(
         msg, /*signingID=*/nil, /*teamID=*/nil, /*isPlatformBinary=*/NO, /*signingTime=*/nil,
         /*secureSigningTime=*/nil, /*entitlements=*/nil, std::move(tree));

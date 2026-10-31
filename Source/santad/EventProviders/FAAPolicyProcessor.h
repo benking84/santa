@@ -145,6 +145,8 @@ class FAAPolicyProcessor {
 
   virtual void ModifyRateLimiterSettings(uint32_t logs_per_sec, uint32_t window_size_sec);
 
+  virtual void ResetCaches();
+
  private:
   SNTDecisionCache* decision_cache_;
   std::shared_ptr<Enricher> enricher_;
@@ -239,6 +241,11 @@ class FAAPolicyProcessorProxy {
 
   FAAPolicyProcessor* operator->() { return policy_processor_.get(); }
   FAAPolicyProcessor& operator*() { return *policy_processor_; }
+  void ResetCaches() {
+    if (policy_processor_) {
+      policy_processor_->ResetCaches();
+    }
+  }
 
  protected:
   std::shared_ptr<FAAPolicyProcessor> policy_processor_;

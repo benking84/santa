@@ -251,6 +251,13 @@
     p = [NSProgress progressWithTotalUnitCount:subpaths.count * 100];
   }
 
+  // Resolve the bundle root path once and require a trailing slash so symlinked
+  // files inside the bundle cannot escape the bundle directory.
+  NSString* resolvedBundleRoot = [event.fileBundlePath stringByResolvingSymlinksInPath];
+  NSString* bundlePrefix = [resolvedBundleRoot hasSuffix:@"/"]
+                               ? resolvedBundleRoot
+                               : [resolvedBundleRoot stringByAppendingString:@"/"];
+
   // Dispatch a block for every file in dirEnum.
   dispatch_apply(subpaths.count, self.queue, ^(size_t i) {
     @autoreleasepool {
@@ -288,8 +295,10 @@
 
       NSString* subpath = subpaths[i];
 
-      NSString* file =
-          [event.fileBundlePath stringByAppendingPathComponent:subpath].stringByStandardizingPath;
+      NSString* file = [[event.fileBundlePath stringByAppendingPathComponent:subpath]
+          stringByResolvingSymlinksInPath];
+      if (![file hasPrefix:bundlePrefix]) return;
+
       SNTFileInfo* fi = [[SNTFileInfo alloc] initWithResolvedPath:file error:NULL];
       if (!fi.isExecutable) return;
 
@@ -299,6 +308,8 @@
   });
 
   [progress resignCurrent];
+
+  if (progress.isCancelled) return nil;
 
   NSMutableArray* fileInfos = [NSMutableArray arrayWithCapacity:binaryCount.load()];
   for (NSUInteger i = 0; i < subpaths.count; i++) {
@@ -352,6 +363,7 @@
 
       // stateQueue, not the main queue: this only needs mutual exclusion for the dictionary
       // write and the two counters, which is no reason to involve the UI thread.
+      if (!se.fileSHA256) return;
       dispatch_sync(self.stateQueue, ^{
         relatedEvents[se.fileSHA256] = se;
         p.completedUnitCount++;
@@ -372,11 +384,11 @@
 
   [progress resignCurrent];
 
-  return relatedEvents;
+  return progress.isCancelled ? nil : relatedEvents;
 }
 
 - (NSString*)calculateBundleHashFromSHA256Hashes:(NSArray*)hashes progress:(NSProgress*)progress {
-  if (!hashes.count) return nil;
+  if (progress.isCancelled || !hashes.count) return nil;
 
   // Account for 5% of the work
   NSProgress* p;

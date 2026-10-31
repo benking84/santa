@@ -47,11 +47,11 @@ static const uint32_t kMaxFatArchCount =
 // in which that header was found.
 @interface MachHeaderWithOffset : NSObject
 @property NSData* data;
-@property uint32_t offset;
-- (instancetype)initWithData:(NSData*)data offset:(uint32_t)offset;
+@property uint64_t offset;
+- (instancetype)initWithData:(NSData*)data offset:(uint64_t)offset;
 @end
 @implementation MachHeaderWithOffset
-- (instancetype)initWithData:(NSData*)data offset:(uint32_t)offset {
+- (instancetype)initWithData:(NSData*)data offset:(uint64_t)offset {
   self = [super init];
   if (self) {
     _data = data;
@@ -678,26 +678,44 @@ static BOOL IsAllowedAncestorExtension(NSString* ext) {
     NSData* fatHeader = [self safeSubdataWithRange:range];
     struct fat_header* fh = (struct fat_header*)[fatHeader bytes];
 
-    if (fatHeader && (fh->magic == FAT_CIGAM || fh->magic == FAT_MAGIC)) {
+    if (fatHeader && (fh->magic == FAT_CIGAM || fh->magic == FAT_MAGIC ||
+                      fh->magic == FAT_CIGAM_64 || fh->magic == FAT_MAGIC_64)) {
+      BOOL bigEndian = (fh->magic == FAT_CIGAM || fh->magic == FAT_CIGAM_64);
+      BOOL use64 = (fh->magic == FAT_CIGAM_64 || fh->magic == FAT_MAGIC_64);
       // These fields are unsigned on disk; keep them unsigned so high-bit
       // values are not narrowed.
-      uint32_t nfat_arch = OSSwapBigToHostInt32(fh->nfat_arch);
+      uint32_t nfat_arch = bigEndian ? OSSwapBigToHostInt32(fh->nfat_arch) : fh->nfat_arch;
 
       // Bound the count before using it as a read length: safeSubdataWithRange:
       // compares against the logical file size, which a sparse file inflates
       // cheaply.
       NSMutableData* fatArchs;
       if (nfat_arch <= kMaxFatArchCount) {
-        range = NSMakeRange(sizeof(struct fat_header), sizeof(struct fat_arch) * nfat_arch);
+        size_t archSize = use64 ? sizeof(struct fat_arch_64) : sizeof(struct fat_arch);
+        range = NSMakeRange(sizeof(struct fat_header), archSize * nfat_arch);
         fatArchs = [[self safeSubdataWithRange:range] mutableCopy];
       }
       if (fatArchs) {
-        struct fat_arch* fat_arch = (struct fat_arch*)[fatArchs mutableBytes];
         for (uint32_t i = 0; i < nfat_arch; ++i) {
-          uint32_t offset = OSSwapBigToHostInt32(fat_arch[i].offset);
-          uint32_t size = OSSwapBigToHostInt32(fat_arch[i].size);
-          int cputype = OSSwapBigToHostInt(fat_arch[i].cputype);
-          int cpusubtype = OSSwapBigToHostInt(fat_arch[i].cpusubtype);
+          uint64_t offset;
+          uint64_t size;
+          int cputype;
+          int cpusubtype;
+          if (use64) {
+            struct fat_arch_64* fat_arch = (struct fat_arch_64*)[fatArchs mutableBytes];
+            offset = bigEndian ? OSSwapBigToHostInt64(fat_arch[i].offset) : fat_arch[i].offset;
+            size = bigEndian ? OSSwapBigToHostInt64(fat_arch[i].size) : fat_arch[i].size;
+            cputype = bigEndian ? OSSwapBigToHostInt(fat_arch[i].cputype) : fat_arch[i].cputype;
+            cpusubtype =
+                bigEndian ? OSSwapBigToHostInt(fat_arch[i].cpusubtype) : fat_arch[i].cpusubtype;
+          } else {
+            struct fat_arch* fat_arch = (struct fat_arch*)[fatArchs mutableBytes];
+            offset = bigEndian ? OSSwapBigToHostInt32(fat_arch[i].offset) : fat_arch[i].offset;
+            size = bigEndian ? OSSwapBigToHostInt32(fat_arch[i].size) : fat_arch[i].size;
+            cputype = bigEndian ? OSSwapBigToHostInt(fat_arch[i].cputype) : fat_arch[i].cputype;
+            cpusubtype =
+                bigEndian ? OSSwapBigToHostInt(fat_arch[i].cpusubtype) : fat_arch[i].cpusubtype;
+          }
 
           range = NSMakeRange(offset, size);
           NSData* machHeader = [self parseSingleMachHeader:[self safeSubdataWithRange:range]];
@@ -779,6 +797,9 @@ static BOOL IsAllowedAncestorExtension(NSString* ext) {
     if (is64) {
       struct segment_command_64* lc = (struct segment_command_64*)[cmdData bytes];
       if (lc->cmd == LC_SEGMENT_64 && memcmp(lc->segname, "__TEXT", 6) == 0) {
+        if (lc->cmdsize < sz_segment) return nil;
+        uint32_t maxSects = (lc->cmdsize - sz_segment) / sz_section;
+        if (lc->nsects > maxSects) return nil;
         nsects = lc->nsects;
         offset += sz_segment;
         break;
@@ -787,6 +808,9 @@ static BOOL IsAllowedAncestorExtension(NSString* ext) {
     } else {
       struct segment_command* lc = (struct segment_command*)[cmdData bytes];
       if (lc->cmd == LC_SEGMENT && memcmp(lc->segname, "__TEXT", 6) == 0) {
+        if (lc->cmdsize < sz_segment) return nil;
+        uint32_t maxSects = (lc->cmdsize - sz_segment) / sz_section;
+        if (lc->nsects > maxSects) return nil;
         nsects = lc->nsects;
         offset += sz_segment;
         break;
@@ -982,7 +1006,10 @@ static BOOL IsAllowedAncestorExtension(NSString* ext) {
 - (MOLCodesignChecker*)codesignCheckerWithError:(NSError**)error {
   if (!self.cachedCodesignChecker && !self.codesignCheckerError) {
     NSError* e;
-    self.cachedCodesignChecker = [[MOLCodesignChecker alloc] initWithBinaryPath:self.path error:&e];
+    int fd = self.fileHandle ? self.fileHandle.fileDescriptor : -1;
+    self.cachedCodesignChecker = [[MOLCodesignChecker alloc] initWithBinaryPath:self.path
+                                                                 fileDescriptor:fd
+                                                                          error:&e];
     self.codesignCheckerError = e;
   }
   if (error) *error = self.codesignCheckerError;

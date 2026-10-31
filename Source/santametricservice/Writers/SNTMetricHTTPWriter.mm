@@ -106,6 +106,8 @@
     }
   }
 
+  [authSession.session finishTasksAndInvalidate];
+
   if (error != nil) {
     *error = localError;
   }

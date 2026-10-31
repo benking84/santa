@@ -143,9 +143,11 @@ REGISTER_COMMAND_NAME(@"install")
   TEE_LOGI(@"...Waiting for up to %lld seconds...", secondsToWait);
 
   dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+  __block BOOL installSuccess = NO;
   [[self.daemonConn remoteObjectProxy]
       installSantaApp:installFromPath
                 reply:^(BOOL success) {
+                  installSuccess = success;
                   if (success) {
                     TEE_LOGI(@"Installation was successful");
                   } else {
@@ -162,7 +164,7 @@ REGISTER_COMMAND_NAME(@"install")
     exit(EXIT_FAILURE);
   }
 
-  exit(EXIT_SUCCESS);
+  exit(installSuccess ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
 @end

@@ -787,4 +787,37 @@ using namespace santa::santad::process_tree;
                  0, @"deep-chain teardown did not complete within 30s");
 }
 
+- (void)testRollbackExecRestoresActorAndRemovesTarget {
+  std::vector<std::unique_ptr<Annotator>> annotators{};
+  auto tree = std::make_shared<ProcessTreeTestPeer>(std::move(annotators),
+                                                    /*removal_grace_ticks=*/10);
+  auto init = tree->InsertInit();
+
+  const struct Pid actor_pid = {.pid = 2, .pidversion = 2};
+  tree->HandleFork(10, init, actor_pid);
+  auto actor = *tree->Get(actor_pid);
+
+  const struct Pid target_pid = {.pid = 2, .pidversion = 3};
+  const struct Program prog = {.executable = "/bin/blocked", .arguments = {"/bin/blocked"}};
+  tree->HandleExec(20, *actor, target_pid, prog, actor->effective_cred_);
+
+  {
+    ProcessToken tok(tree, PidList{actor_pid, target_pid});
+    XCTAssertTrue(tree->Get(actor_pid).has_value());
+    XCTAssertTrue(tree->Get(target_pid).has_value());
+
+    // Roll back the denied AUTH_EXEC while the token still holds both pids.
+    tree->RollbackExec(actor_pid, target_pid);
+  }
+
+  // Once the token is released, target is erased and actor remains in the tree
+  // even after advancing timestamps well past the removal grace window.
+  XCTAssertFalse(tree->Get(target_pid).has_value());
+  XCTAssertTrue(tree->Get(actor_pid).has_value());
+
+  const struct Pid other_pid = {.pid = 3, .pidversion = 3};
+  tree->HandleFork(100, init, other_pid);
+  XCTAssertTrue(tree->Get(actor_pid).has_value());
+}
+
 @end

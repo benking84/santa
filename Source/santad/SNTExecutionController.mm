@@ -23,6 +23,7 @@
 #include <sys/param.h>
 #include <utmpx.h>
 
+#include <atomic>
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -937,7 +938,12 @@ static BOOL DecisionIsCompiler(SNTEventState decision) {
         // Copy the esMsg to ensure that when the passed-in ref goes away
         // we're still holding a valid Message object inside the replyBlock.
         __block Message esMsgCopy(esMsg);
+        auto replied = std::make_shared<std::atomic<bool>>(false);
         replyBlock = ^(BOOL authenticated) {
+          if (replied->exchange(true)) {
+            return;
+          }
+          const es_process_t* heldTargetProc = esMsgCopy->event.exec.target;
           LOGD(@"User responded to block event for %@ with authenticated: %d", se.filePath,
                authenticated);
           // The window closed while the prompt was up: its kill is already due,
@@ -969,7 +975,7 @@ static BOOL DecisionIsCompiler(SNTEventState decision) {
             }
 
             if (stoppedProc) {
-              _ttyWriter->Write(targetProc, @"Authorized, allowing execution\n---\n\n");
+              _ttyWriter->Write(heldTargetProc, @"Authorized, allowing execution\n---\n\n");
             }
 
             // Allow the binary to begin running. A hold that could not stop the
@@ -982,7 +988,7 @@ static BOOL DecisionIsCompiler(SNTEventState decision) {
             // reported: a resume that failed left it stopped, and SIGKILL takes
             // a stopped process at the deadline. The record names the process
             // by audit token, so it never reaches a process that reused the pid.
-            [self recordTimedRuleKillForDecision:cd process:targetProc->audit_token];
+            [self recordTimedRuleKillForDecision:cd process:heldTargetProc->audit_token];
           } else {
             // Decision stays as-is; only the extra field says why.
             cd.decisionExtra = DecisionExtra(cd.authorizationMethod,
@@ -992,7 +998,7 @@ static BOOL DecisionIsCompiler(SNTEventState decision) {
             // process. One the hold could not stop was killed then.
             if (stoppedProc) {
               _ttyWriter->Write(
-                  targetProc,
+                  heldTargetProc,
                   authenticated ? @"Authorized after the window closed, denying execution\n---\n\n"
                                 : @"Authorization not given, denying execution\n---\n\n");
               self.processControlBlock(newProcToken, ProcessControl::Kill);

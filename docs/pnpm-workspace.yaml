@@ -24,7 +24,7 @@ overrides:
   "fast-uri@<3.1.9": 3.1.9
   "follow-redirects@<1.16.2": 1.16.2
   "http-proxy-middleware@>=0.16.0 <2.0.10": 2.0.10
-  "joi@<18.2.9": 18.2.9
+  "joi@<18.3.1": 18.3.1
   "js-yaml@<3.15.2": 3.15.2
   "js-yaml@>=4.0.0 <4.3.2": 4.3.2
   "katex@<0.18.2": 0.18.2
@@ -39,6 +39,7 @@ overrides:
   "svgo@>=3.0.0 <3.3.5": 3.3.5
   "tinypool@<2.1.2": 2.1.2
   "uuid@<14.0.0": 14.0.0
+  "webpack-dev-middleware@<7.4.6": 7.4.6
   "webpack-dev-server@<5.2.6": 5.2.6
   "websocket-driver@<0.7.5": 0.7.5
   "ws@>=7.0.0 <7.5.11": 7.5.11

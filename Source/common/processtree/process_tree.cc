@@ -148,6 +148,9 @@ void ProcessTree::HandleExec(uint64_t timestamp, const Process& p,
     if (!StepLocked({timestamp, EventKind::kExec, p.pid_, new_pid})) {
       return;
     }
+    if (auto actor_proc = GetLocked(p.pid_)) {
+      (*actor_proc)->reap_at_ts_ = timestamp;
+    }
     remove_at_.push({timestamp, p.pid_});
     PropagateAnnotationsLocked(p, *new_proc, /*across_exec=*/true);
     map_.emplace(new_proc->pid_, new_proc);
@@ -163,8 +166,27 @@ void ProcessTree::HandleExit(uint64_t timestamp, const Process& p) {
   if (!StepLocked({timestamp, EventKind::kExit, p.pid_, Pid{}})) {
     return;
   }
+  if (auto actor_proc = GetLocked(p.pid_)) {
+    (*actor_proc)->reap_at_ts_ = timestamp;
+  }
   remove_at_.push({timestamp, p.pid_});
   DrainRemovals();
+}
+
+void ProcessTree::RollbackExec(const Pid actor, const Pid target) {
+  absl::MutexLock lock(mtx_);
+  if (auto actor_proc = GetLocked(actor)) {
+    (*actor_proc)->reap_at_ts_.reset();
+    (*actor_proc)->tombstoned_ = false;
+  }
+  if (auto target_proc = GetLocked(target)) {
+    (*target_proc)->reap_at_ts_.reset();
+    if ((*target_proc)->refcnt_.load(std::memory_order_relaxed) > 0) {
+      (*target_proc)->tombstoned_ = true;
+    } else {
+      map_.erase(target);
+    }
+  }
 }
 
 ProcessTree::ExecActor ProcessTree::GetExecActor(uint64_t timestamp,
@@ -226,10 +248,13 @@ void ProcessTree::DrainRemovals() {
   // at the first that has not — every deeper entry is newer. This is O(K log R)
   // in the number reaped, not O(R) in the number pending.
   while (!remove_at_.empty() && remove_at_.top().first < cutoff) {
-    const struct Pid pid = remove_at_.top().second;
+    const auto [ts, pid] = remove_at_.top();
     remove_at_.pop();
-    if (auto target = GetLocked(pid);
-        target && (*target)->refcnt_.load(std::memory_order_relaxed) > 0) {
+    auto target = GetLocked(pid);
+    if (!target || (*target)->reap_at_ts_ != ts) {
+      continue;
+    }
+    if ((*target)->refcnt_.load(std::memory_order_relaxed) > 0) {
       (*target)->tombstoned_ = true;
     } else {
       map_.erase(pid);

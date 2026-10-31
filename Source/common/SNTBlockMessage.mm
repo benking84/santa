@@ -308,6 +308,8 @@ static id EncodedValueOrNull(id value) {
   [replacements enumerateKeysAndObjectsUsingBlock:^(NSString* key, NSString* value, BOOL* stop) {
     if ((id)value != [NSNull null]) {
       formatStr = [formatStr stringByReplacingOccurrencesOfString:key withString:value];
+    } else {
+      formatStr = [formatStr stringByReplacingOccurrencesOfString:key withString:@""];
     }
   }];
 
